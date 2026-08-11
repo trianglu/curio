@@ -9,7 +9,7 @@ export function LoadingPath({ subject, stage = "Researching your subject…" }: 
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-4 py-20">
       <div className="relative mb-8">
-        <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600" />
+        <div className="h-20 w-20 animate-spin rounded-full border-4 border-violet-100 border-t-violet-500" />
         <span className="absolute inset-0 flex items-center justify-center text-2xl">🔬</span>
       </div>
       <h2 className="text-xl font-bold text-stone-900">Building your {subject} path</h2>

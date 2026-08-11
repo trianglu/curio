@@ -46,7 +46,7 @@ export default function LessonPage() {
 
   return (
     <div className="flex-1 px-4 py-8">
-      <LessonPlayer lesson={lesson} pathId={path.id} pathMode={path.mode} />
+      <LessonPlayer lesson={lesson} path={path} pathId={path.id} />
     </div>
   );
 }

@@ -1,6 +1,5 @@
 import { createId } from "./id";
 import type {
-  LearningMode,
   LearningPath,
   Lesson,
   LessonContent,
@@ -15,7 +14,6 @@ interface UnitTemplate {
   lessons: Array<{
     title: string;
     type: LessonType;
-    mode: LearningMode | "both";
     minutes: number;
     content: (subject: string) => Omit<LessonContent, "confidenceLevel" | "caveats">;
   }>;
@@ -29,7 +27,6 @@ const FOUNDATION_UNITS: UnitTemplate[] = [
       {
         title: "The Big Picture",
         type: "summary",
-        mode: "both",
         minutes: 3,
         content: (subject) => ({
           summary: `A quick orientation to ${subject}.`,
@@ -44,7 +41,6 @@ const FOUNDATION_UNITS: UnitTemplate[] = [
       {
         title: "Everyday Connections",
         type: "analogy",
-        mode: "passive",
         minutes: 2,
         content: (subject) => ({
           summary: `See ${subject} in things you already know.`,
@@ -60,7 +56,6 @@ const FOUNDATION_UNITS: UnitTemplate[] = [
       {
         title: "Core Vocabulary",
         type: "concept",
-        mode: "both",
         minutes: 4,
         content: (subject) => ({
           summary: `Essential terms you'll see everywhere in ${subject}.`,
@@ -75,7 +70,6 @@ const FOUNDATION_UNITS: UnitTemplate[] = [
       {
         title: "Check Your Intuition",
         type: "quiz",
-        mode: "aggressive",
         minutes: 5,
         content: (subject) => ({
           summary: `Quick check on your starting intuition for ${subject}.`,
@@ -106,7 +100,6 @@ const FOUNDATION_UNITS: UnitTemplate[] = [
       {
         title: "First Principles",
         type: "concept",
-        mode: "both",
         minutes: 4,
         content: (subject) => ({
           summary: `The foundational assumptions behind ${subject}.`,
@@ -121,7 +114,6 @@ const FOUNDATION_UNITS: UnitTemplate[] = [
       {
         title: "How Experts Think",
         type: "analogy",
-        mode: "passive",
         minutes: 3,
         content: (subject) => ({
           summary: `The mental habits that make ${subject} click.`,
@@ -137,7 +129,6 @@ const FOUNDATION_UNITS: UnitTemplate[] = [
       {
         title: "Worked Example",
         type: "concept",
-        mode: "aggressive",
         minutes: 8,
         content: (subject) => ({
           summary: `Walk through a canonical example in ${subject}.`,
@@ -152,7 +143,6 @@ const FOUNDATION_UNITS: UnitTemplate[] = [
       {
         title: "Practice Problem",
         type: "problem",
-        mode: "aggressive",
         minutes: 10,
         content: (subject) => ({
           summary: `Apply what you've learned in ${subject}.`,
@@ -183,7 +173,6 @@ const FOUNDATION_UNITS: UnitTemplate[] = [
       {
         title: "The Central Model",
         type: "concept",
-        mode: "both",
         minutes: 5,
         content: (subject) => ({
           summary: `The core framework that organizes ${subject}.`,
@@ -198,7 +187,6 @@ const FOUNDATION_UNITS: UnitTemplate[] = [
       {
         title: "Quick Recap",
         type: "summary",
-        mode: "passive",
         minutes: 2,
         content: (subject) => ({
           summary: `Everything so far in ${subject}, in two minutes.`,
@@ -213,7 +201,6 @@ const FOUNDATION_UNITS: UnitTemplate[] = [
       {
         title: "Synthesis Quiz",
         type: "quiz",
-        mode: "aggressive",
         minutes: 6,
         content: (subject) => ({
           summary: `Connect ideas across your ${subject} foundation.`,
@@ -253,7 +240,6 @@ const EXPANSION_TEMPLATES: Array<{
       {
         title: "Hidden Assumptions",
         type: "deep-dive",
-        mode: "both",
         minutes: 6,
         content: (subject) => ({
           summary: `Assumptions you didn't know you were making in ${subject}.`,
@@ -268,7 +254,6 @@ const EXPANSION_TEMPLATES: Array<{
       {
         title: "Real-World Application",
         type: "concept",
-        mode: "passive",
         minutes: 4,
         content: (subject) => ({
           summary: `Where ${subject} shows up outside textbooks.`,
@@ -283,7 +268,6 @@ const EXPANSION_TEMPLATES: Array<{
       {
         title: "Challenge Problem",
         type: "problem",
-        mode: "aggressive",
         minutes: 12,
         content: (subject) => ({
           summary: `A harder problem to stretch your ${subject} skills.`,
@@ -305,7 +289,6 @@ const EXPANSION_TEMPLATES: Array<{
       {
         title: "Current Frontiers",
         type: "deep-dive",
-        mode: "both",
         minutes: 7,
         content: (subject) => ({
           summary: `What experts are actively researching in ${subject}.`,
@@ -320,7 +303,6 @@ const EXPANSION_TEMPLATES: Array<{
       {
         title: "Mind-Bending Implications",
         type: "analogy",
-        mode: "passive",
         minutes: 3,
         content: (subject) => ({
           summary: `Surprising consequences of ${subject}.`,
@@ -336,7 +318,6 @@ const EXPANSION_TEMPLATES: Array<{
       {
         title: "Research Spotlight",
         type: "summary",
-        mode: "passive",
         minutes: 4,
         content: (subject) => ({
           summary: `A landmark idea that changed ${subject}.`,
@@ -351,7 +332,6 @@ const EXPANSION_TEMPLATES: Array<{
       {
         title: "Expert-Level Quiz",
         type: "quiz",
-        mode: "aggressive",
         minutes: 8,
         content: (subject) => ({
           summary: `Test deeper understanding of ${subject}.`,
@@ -383,7 +363,6 @@ const EXPANSION_TEMPLATES: Array<{
       {
         title: "Subfield Overview",
         type: "concept",
-        mode: "both",
         minutes: 5,
         content: (subject) => ({
           summary: `A major sub-area within ${subject}.`,
@@ -398,7 +377,6 @@ const EXPANSION_TEMPLATES: Array<{
       {
         title: "Technical Deep Dive",
         type: "deep-dive",
-        mode: "aggressive",
         minutes: 15,
         content: (subject) => ({
           summary: `Detailed exploration of a key technique in ${subject}.`,
@@ -413,7 +391,6 @@ const EXPANSION_TEMPLATES: Array<{
       {
         title: "Daily Insight",
         type: "summary",
-        mode: "passive",
         minutes: 2,
         content: (subject) => ({
           summary: `One powerful idea from ${subject} to carry today.`,
@@ -474,7 +451,6 @@ function buildLessons(
     unitId,
     title: interpolate(template.title, subject),
     type: template.type,
-    mode: template.mode,
     content: withDefaults(template.content(subject)),
     status: index === 0 && startOrder === 0 ? "available" : "locked",
     order: startOrder + index,
@@ -503,7 +479,7 @@ function buildUnit(
   };
 }
 
-export function generateInitialPath(subject: string, mode: LearningMode): LearningPath {
+export function generateInitialPath(subject: string): LearningPath {
   const pathId = createId("path");
   const today = new Date().toISOString().slice(0, 10);
 
@@ -517,7 +493,6 @@ export function generateInitialPath(subject: string, mode: LearningMode): Learni
   return {
     id: pathId,
     subject,
-    mode,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     units,

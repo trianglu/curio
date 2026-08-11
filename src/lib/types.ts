@@ -1,16 +1,19 @@
-export type LearningMode = "passive" | "aggressive";
-
 export type LessonType =
   | "concept"
   | "analogy"
   | "summary"
   | "quiz"
   | "problem"
-  | "deep-dive";
+  | "deep-dive"
+  | "review";
+
+export type UnitKind = "content" | "checkpoint";
 
 export type LessonStatus = "locked" | "available" | "in_progress" | "completed";
 
-export type ExpansionStatus = "idle" | "expanding" | "paused" | "generating";
+export type ExpansionStatus = "idle" | "expanding" | "paused" | "generating" | "exhausted";
+
+export type GenerationProvider = "groq" | "gemini";
 
 export type ConfidenceLevel =
   | "established"
@@ -54,13 +57,20 @@ export interface Lesson {
   unitId: string;
   title: string;
   type: LessonType;
-  mode: LearningMode | "both";
   content: LessonContent;
   status: LessonStatus;
   order: number;
   depth: number;
   estimatedMinutes: number;
   isNew?: boolean;
+  /** Populated for review-round lessons recycled from earlier problem/quiz lessons. */
+  reviewSource?: {
+    lessonId: string;
+    lessonTitle: string;
+    unitTitle: string;
+    unitOrder: number;
+    sourceType: "problem" | "quiz";
+  };
 }
 
 export interface Unit {
@@ -71,12 +81,14 @@ export interface Unit {
   order: number;
   depth: number;
   lessons: Lesson[];
+  kind?: UnitKind;
+  /** Content unit order this checkpoint follows (checkpoint units only). */
+  checkpointAfterUnit?: number;
 }
 
 export interface LearningPath {
   id: string;
   subject: string;
-  mode: LearningMode;
   createdAt: string;
   updatedAt: string;
   units: Unit[];
@@ -87,6 +99,15 @@ export interface LearningPath {
   lastActiveDate: string;
   lessonsCompleted: number;
   aiGenerated: boolean;
+  /** Which AI provider created the initial path. */
+  generationProvider?: GenerationProvider;
+  /** True once Gemini has reviewed and enriched a Groq-generated path. */
+  geminiUpgraded?: boolean;
+  lastAddedUnitTitle?: string;
+  lastAddedUnitAt?: string;
+  expansionStopReason?: string;
+  /** Consecutive expansion passes that found no reliable content. */
+  expansionEmptyPasses?: number;
 }
 
 export interface ReviewCard {

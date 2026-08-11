@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Curio — Learn anything, at your pace",
   description:
-    "A Duolingo-style learning app that builds personalized paths for any subject. Choose passive or aggressive learning modes.",
+    "A Duolingo-style learning app that builds personalized paths for any subject.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#4f46e5",
+  themeColor: "#8b5cf6",
   width: "device-width",
   initialScale: 1,
 };
@@ -43,7 +43,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} antialiased`}
     >
-      <body className="min-h-dvh bg-stone-50 text-stone-900">
+      <body className="min-h-dvh text-stone-900">
         <ErrorBoundary>
           <LearningProvider>
             <AppHeader />
@@ -54,9 +54,21 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                  navigator.serviceWorker.register('/sw.js').catch(() => {});
-                });
+                var isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+                if (isDev) {
+                  navigator.serviceWorker.getRegistrations().then(function(regs) {
+                    regs.forEach(function(r) { r.unregister(); });
+                  });
+                  if ('caches' in window) {
+                    caches.keys().then(function(keys) {
+                      keys.forEach(function(k) { caches.delete(k); });
+                    });
+                  }
+                } else {
+                  window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/sw.js').catch(function() {});
+                  });
+                }
               }
             `,
           }}

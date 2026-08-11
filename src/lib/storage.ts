@@ -1,3 +1,4 @@
+import { repairPath } from "./repair-lessons";
 import { DEFAULT_PROFILE, type LearningPath, type LessonContent, type QuizQuestion, type UserProfile } from "./types";
 
 const STORAGE_KEY = "curio_profile_v2";
@@ -39,12 +40,17 @@ function normalizeQuestion(question: Partial<QuizQuestion>): QuizQuestion {
   };
 }
 
+function looksLikeGroqCompact(path: Partial<LearningPath>): boolean {
+  const units = path.units ?? [];
+  const lessonCount = units.reduce((total, unit) => total + (unit?.lessons?.length ?? 0), 0);
+  return units.length === 1 && lessonCount >= 4 && lessonCount <= 7;
+}
+
 function normalizePath(path: Partial<LearningPath> | null | undefined): LearningPath {
   if (!path || typeof path !== "object") {
     return {
       id: "invalid_path",
       subject: "Unknown",
-      mode: "passive",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       units: [],
@@ -58,10 +64,9 @@ function normalizePath(path: Partial<LearningPath> | null | undefined): Learning
     };
   }
 
-  return {
+  return repairPath({
     id: path.id ?? "unknown_path",
     subject: path.subject ?? "Unknown subject",
-    mode: path.mode ?? "passive",
     createdAt: path.createdAt ?? new Date().toISOString(),
     updatedAt: path.updatedAt ?? new Date().toISOString(),
     units: (path.units ?? []).map((unit) => ({
@@ -71,28 +76,45 @@ function normalizePath(path: Partial<LearningPath> | null | undefined): Learning
       description: unit?.description ?? "",
       order: unit?.order ?? 0,
       depth: unit?.depth ?? 1,
+      kind: unit?.kind,
+      checkpointAfterUnit: unit?.checkpointAfterUnit,
       lessons: (unit?.lessons ?? []).map((lesson) => ({
         id: lesson?.id ?? "unknown_lesson",
         unitId: lesson?.unitId ?? unit?.id ?? "unknown_unit",
         title: lesson?.title ?? "Lesson",
         type: lesson?.type ?? "summary",
-        mode: lesson?.mode ?? "both",
         content: normalizeContent(lesson?.content),
         status: lesson?.status ?? "locked",
         order: lesson?.order ?? 0,
         depth: lesson?.depth ?? 1,
         estimatedMinutes: lesson?.estimatedMinutes ?? 3,
         isNew: lesson?.isNew,
+        reviewSource: lesson?.reviewSource,
       })),
     })),
-    expansionStatus: path.expansionStatus ?? "idle",
+    expansionStatus: (() => {
+      const status = path.expansionStatus ?? "idle";
+      if (path.aiGenerated && (status === "idle" || status === "generating")) {
+        return "expanding" as const;
+      }
+      return status;
+    })(),
     expansionDepth: path.expansionDepth ?? 0,
     totalXp: path.totalXp ?? 0,
     streak: path.streak ?? 0,
     lastActiveDate: path.lastActiveDate ?? new Date().toISOString().slice(0, 10),
     lessonsCompleted: path.lessonsCompleted ?? 0,
     aiGenerated: path.aiGenerated ?? false,
-  };
+    generationProvider:
+      path.generationProvider ?? (looksLikeGroqCompact(path) ? "groq" : undefined),
+    geminiUpgraded:
+      path.geminiUpgraded ??
+      !(path.generationProvider === "groq" || looksLikeGroqCompact(path)),
+    lastAddedUnitTitle: path.lastAddedUnitTitle,
+    lastAddedUnitAt: path.lastAddedUnitAt,
+    expansionStopReason: path.expansionStopReason,
+    expansionEmptyPasses: path.expansionEmptyPasses ?? 0,
+  });
 }
 
 export function normalizeProfile(profile: UserProfile): UserProfile {

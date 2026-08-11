@@ -1,4 +1,5 @@
-import type { LearningMode, LearningPath, Lesson, LessonStatus, Unit } from "./types";
+import type { LearningPath, Lesson, LessonStatus, Unit } from "./types";
+import { EXPANSION_EMPTY_PASS_LIMIT } from "./expansion-runner";
 
 export function getAllLessons(path: LearningPath): Lesson[] {
   return path.units.flatMap((unit) => unit.lessons);
@@ -8,19 +9,28 @@ export function getLesson(path: LearningPath, lessonId: string): Lesson | undefi
   return getAllLessons(path).find((lesson) => lesson.id === lessonId);
 }
 
+export function getUnitForLesson(path: LearningPath, lessonId: string): Unit | undefined {
+  return path.units.find((unit) => unit.lessons.some((lesson) => lesson.id === lessonId));
+}
+
+export function getLessonXpGain(lesson: Lesson): number {
+  if (lesson.type === "review") return 12;
+  return lesson.type === "quiz" || lesson.type === "problem" ? 20 : 15;
+}
+
+export function isUnitFullyCompleted(unit: Unit): boolean {
+  return unit.lessons.length > 0 && unit.lessons.every((lesson) => lesson.status === "completed");
+}
+
 export function getNextAvailableLesson(path: LearningPath): Lesson | undefined {
   return getAllLessons(path).find((lesson) => lesson.status === "available");
 }
 
-export function isLessonUnlockedForMode(lesson: Lesson, mode: LearningMode): boolean {
-  if (lesson.mode === "both") return true;
-  return lesson.mode === mode;
-}
-
-export function getVisibleLessons(path: LearningPath): Lesson[] {
-  return getAllLessons(path).filter((lesson) =>
-    isLessonUnlockedForMode(lesson, path.mode),
-  );
+/** True when the learner has finished every lesson currently on the path. */
+export function isPathCaughtUp(path: LearningPath): boolean {
+  const lessons = getAllLessons(path);
+  if (lessons.length === 0) return false;
+  return lessons.every((lesson) => lesson.status === "completed");
 }
 
 export function getPathProgress(path: LearningPath): {
@@ -28,9 +38,9 @@ export function getPathProgress(path: LearningPath): {
   total: number;
   percent: number;
 } {
-  const visible = getVisibleLessons(path);
-  const completed = visible.filter((l) => l.status === "completed").length;
-  const total = visible.length;
+  const lessons = getAllLessons(path);
+  const completed = lessons.filter((l) => l.status === "completed").length;
+  const total = lessons.length;
   return {
     completed,
     total,
@@ -39,21 +49,30 @@ export function getPathProgress(path: LearningPath): {
 }
 
 function unlockNextLesson(path: LearningPath): LearningPath {
-  const lessons = getAllLessons(path);
-  const completedIds = new Set(
-    lessons.filter((l) => l.status === "completed").map((l) => l.id),
-  );
+  return reconcileLessonLocks(path);
+}
 
-  let foundAvailable = false;
+/** Exactly one lesson is available (or in_progress) — same rules for initial and expanded units. */
+export function reconcileLessonLocks(path: LearningPath): LearningPath {
+  const lessons = getAllLessons(path);
+  const inProgress = lessons.find((l) => l.status === "in_progress");
+
+  let unlocked = false;
   const updatedLessons = lessons.map((lesson) => {
-    if (lesson.status === "completed" || lesson.status === "in_progress") {
-      return lesson;
+    if (lesson.status === "completed") return lesson;
+
+    if (inProgress) {
+      return lesson.id === inProgress.id
+        ? lesson
+        : { ...lesson, status: "locked" as LessonStatus };
     }
-    if (!foundAvailable && !completedIds.has(lesson.id)) {
-      foundAvailable = true;
+
+    if (!unlocked) {
+      unlocked = true;
       return { ...lesson, status: "available" as LessonStatus };
     }
-    return lesson;
+
+    return { ...lesson, status: "locked" as LessonStatus };
   });
 
   return applyLessonsToPath(path, updatedLessons);
@@ -70,12 +89,13 @@ function applyLessonsToPath(path: LearningPath, lessons: Lesson[]): LearningPath
 }
 
 export function completeLesson(path: LearningPath, lessonId: string): LearningPath {
+  const completedLesson = getLesson(path, lessonId);
   const lessons = getAllLessons(path).map((lesson) => {
     if (lesson.id !== lessonId) return lesson;
     return { ...lesson, status: "completed" as LessonStatus };
   });
 
-  const xpGain = path.mode === "passive" ? 10 : 25;
+  const xpGain = completedLesson ? getLessonXpGain(completedLesson) : 15;
   const today = new Date().toISOString().slice(0, 10);
   const streak =
     path.lastActiveDate === today
@@ -103,27 +123,26 @@ function yesterday(): string {
 }
 
 export function appendUnit(path: LearningPath, newUnit: Unit): LearningPath {
-  const previousLessons = getAllLessons(path);
-  const lastCompletedIndex = previousLessons.reduce(
-    (max, lesson, index) => (lesson.status === "completed" ? index : max),
-    -1,
-  );
+  const unitWithFlags = {
+    ...newUnit,
+    lessons: newUnit.lessons.map((lesson, index) => ({
+      ...lesson,
+      status: "locked" as LessonStatus,
+      isNew: lesson.isNew ?? index === 0,
+    })),
+  };
 
-  const newLessons = newUnit.lessons.map((lesson, index) => {
-    const globalIndex = previousLessons.length + index;
-    if (globalIndex === lastCompletedIndex + 1 || (lastCompletedIndex === -1 && index === 0)) {
-      return { ...lesson, status: "available" as LessonStatus, isNew: lesson.isNew ?? index === 0 };
-    }
-    return lesson;
-  });
-
-  return {
+  return reconcileLessonLocks({
     ...path,
-    units: [...path.units, { ...newUnit, lessons: newLessons }],
+    units: [...path.units, unitWithFlags],
     expansionDepth: path.expansionDepth + 1,
     expansionStatus: "expanding",
     updatedAt: new Date().toISOString(),
-  };
+    lastAddedUnitTitle: newUnit.title,
+    lastAddedUnitAt: new Date().toISOString(),
+    expansionEmptyPasses: 0,
+    expansionStopReason: undefined,
+  });
 }
 
 export function clearNewFlags(path: LearningPath): LearningPath {
@@ -146,13 +165,82 @@ export function getExpansionLabel(path: LearningPath): string {
 }
 
 export function shouldContinueExpanding(path: LearningPath): boolean {
-  return path.expansionStatus === "expanding" && path.expansionDepth < 8;
+  return (
+    path.aiGenerated &&
+    path.expansionStatus !== "paused" &&
+    path.expansionStatus !== "exhausted"
+  );
+}
+
+export function needsGeminiUpgrade(path: LearningPath): boolean {
+  if (!path.aiGenerated || path.geminiUpgraded) return false;
+  if (path.generationProvider === "groq") return true;
+  // Legacy compact paths created before provider tracking
+  const lessons = getAllLessons(path);
+  return !path.generationProvider && path.units.length === 1 && lessons.length >= 4 && lessons.length <= 7;
+}
+
+/** Reset stuck or legacy statuses so background expansion can run. */
+export function ensureExpansionRunning(path: LearningPath): LearningPath {
+  if (!path.aiGenerated || path.expansionStatus === "paused" || path.expansionStatus === "exhausted") {
+    return path;
+  }
+  if (path.expansionStatus === "idle" || path.expansionStatus === "generating") {
+    return { ...path, expansionStatus: "expanding" };
+  }
+  return path;
+}
+
+export function isExpansionActive(path: LearningPath): boolean {
+  return path.expansionStatus === "expanding" || path.expansionStatus === "generating";
 }
 
 export function toggleExpansion(path: LearningPath): LearningPath {
+  if (path.expansionStatus === "exhausted") {
+    return {
+      ...path,
+      expansionStatus: "expanding",
+      expansionStopReason: undefined,
+      expansionEmptyPasses: 0,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  const pausing = path.expansionStatus !== "paused";
   return {
     ...path,
-    expansionStatus: path.expansionStatus === "expanding" ? "paused" : "expanding",
+    expansionStatus: pausing ? "paused" : "expanding",
     updatedAt: new Date().toISOString(),
+  };
+}
+
+export function markExpansionExhausted(path: LearningPath, reason: string): LearningPath {
+  return {
+    ...path,
+    expansionStatus: "exhausted",
+    expansionStopReason: reason,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function recordExpansionEmptyPass(
+  path: LearningPath,
+  reason: string,
+): { path: LearningPath; exhausted: boolean } {
+  const passes = (path.expansionEmptyPasses ?? 0) + 1;
+  if (passes >= EXPANSION_EMPTY_PASS_LIMIT) {
+    return {
+      path: markExpansionExhausted({ ...path, expansionEmptyPasses: passes }, reason),
+      exhausted: true,
+    };
+  }
+  return {
+    path: {
+      ...path,
+      expansionStatus: "expanding",
+      expansionEmptyPasses: passes,
+      expansionStopReason: reason,
+      updatedAt: new Date().toISOString(),
+    },
+    exhausted: false,
   };
 }

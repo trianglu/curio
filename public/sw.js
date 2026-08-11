@@ -1,5 +1,5 @@
-const CACHE_NAME = "curio-v3";
-const ASSETS = ["/", "/manifest.json", "/review"];
+const CACHE_NAME = "curio-v4";
+const ASSETS = ["/manifest.json"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)));
@@ -17,6 +17,18 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+
+  const isNavigation =
+    event.request.mode === "navigate" ||
+    event.request.headers.get("accept")?.includes("text/html");
+
+  // Always fetch HTML fresh — stale cached pages break React interactivity
+  if (isNavigation) {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request)),
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
@@ -40,7 +52,7 @@ self.addEventListener("push", (event) => {
 
   try {
     const payload = event.data.json();
-    event.waitUntil(
+    event.respondWith(
       self.registration.showNotification(payload.title ?? "Curio", {
         body: payload.body ?? "Your lesson is ready",
         icon: "/icon",
@@ -49,7 +61,7 @@ self.addEventListener("push", (event) => {
       }),
     );
   } catch {
-    event.waitUntil(
+    event.respondWith(
       self.registration.showNotification("Curio", {
         body: event.data?.text() ?? "Your lesson is ready",
         icon: "/icon",
@@ -62,7 +74,7 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = event.notification.data?.url ?? "/";
 
-  event.waitUntil(
+  event.respondWith(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {
         if ("focus" in client) {

@@ -6,48 +6,37 @@ import { useLearning } from "@/context/learning-context";
 import { getPathProgress } from "@/lib/path-engine";
 
 export function AppHeader() {
-  const { activePath, dueReviewCount } = useLearning();
+  const { activePath } = useLearning();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-stone-200/80 bg-white/90 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-violet-100/80 bg-white/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
         <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-lg font-bold text-white shadow-sm">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl curio-btn-primary text-lg font-bold text-white">
             C
           </span>
-          <span className="text-xl font-semibold tracking-tight text-stone-900">Curio</span>
+          <span className="text-xl font-bold tracking-tight curio-gradient-text">Curio</span>
         </Link>
 
         <nav className="flex items-center gap-3">
-          <Link
-            href="/review"
-            className="relative rounded-lg px-2 py-1.5 text-sm text-stone-600 hover:bg-stone-100 hover:text-stone-900"
-          >
-            Review
-            {dueReviewCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
-                {dueReviewCount}
-              </span>
-            )}
-          </Link>
           <AuthPanel />
         </nav>
       </div>
 
       {activePath && (
-        <div className="border-t border-stone-100 bg-stone-50/50 px-4 py-2">
+        <div className="border-t border-violet-100/60 bg-gradient-to-r from-violet-50/80 via-sky-50/60 to-amber-50/50 px-4 py-2.5">
           <div className="mx-auto flex max-w-3xl items-center justify-between text-sm">
             <div>
-              <p className="font-medium text-stone-800">{activePath.subject}</p>
-              <p className="text-xs capitalize text-stone-500">{activePath.mode} mode</p>
+              <p className="font-semibold text-stone-800">{activePath.subject}</p>
+              <p className="text-xs text-violet-600">Learning path</p>
             </div>
-            <div className="flex items-center gap-4">
-              <Stat label="Streak" value={activePath.streak} color="text-amber-600" />
-              <Stat label="XP" value={activePath.totalXp} color="text-indigo-600" />
-              <Stat
+            <div className="flex items-center gap-2">
+              <StatPill label="Streak" value={activePath.streak} className="bg-amber-100 text-amber-800" />
+              <StatPill label="XP" value={activePath.totalXp} className="bg-violet-100 text-violet-800" />
+              <StatPill
                 label="Done"
                 value={`${getPathProgress(activePath).percent}%`}
-                color="text-emerald-600"
+                className="bg-emerald-100 text-emerald-800"
               />
             </div>
           </div>
@@ -57,19 +46,19 @@ export function AppHeader() {
   );
 }
 
-function Stat({
+function StatPill({
   label,
   value,
-  color,
+  className,
 }: {
   label: string;
   value: string | number;
-  color: string;
+  className: string;
 }) {
   return (
-    <div className="text-center">
-      <p className={`font-bold ${color}`}>{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-stone-400">{label}</p>
+    <div className={`rounded-xl px-2.5 py-1 text-center ${className}`}>
+      <p className="text-sm font-bold">{value}</p>
+      <p className="text-[9px] font-semibold uppercase tracking-wide opacity-70">{label}</p>
     </div>
   );
 }

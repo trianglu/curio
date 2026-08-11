@@ -60,7 +60,7 @@ export function NotificationPrompt() {
   }, [savePushSubscription]);
 
   if (dismissed || permission === "granted" || profile.pushSubscription) return null;
-  if (!profile.paths.some((p) => p.mode === "passive")) return null;
+  if (profile.paths.length === 0) return null;
 
   return (
     <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4">
@@ -71,7 +71,7 @@ export function NotificationPrompt() {
             Get notified when your next lesson is ready
           </p>
           <p className="mt-1 text-xs text-violet-700">
-            Perfect for passive mode — we&apos;ll ping you when new bite-sized lessons arrive.
+            Perfect for learning on the go — we&apos;ll ping you when new lessons arrive.
           </p>
           <div className="mt-3 flex gap-2">
             <button

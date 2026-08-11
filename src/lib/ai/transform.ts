@@ -1,11 +1,12 @@
 import { createId } from "../id";
+import { reconcileLessonLocks } from "../path-engine";
 import type {
   AiExpansionResponse,
   AiLesson,
   AiPathResponse,
+  AiPathUpgradeResponse,
 } from "./schemas";
 import type {
-  LearningMode,
   LearningPath,
   Lesson,
   LessonContent,
@@ -52,7 +53,6 @@ function mapLessons(
     unitId,
     title: aiLesson.title,
     type: aiLesson.type,
-    mode: aiLesson.mode,
     content: mapContent(aiLesson.content),
     status: (index === 0 && startOrder === 0 ? "available" : "locked") as LessonStatus,
     order: startOrder + index,
@@ -81,8 +81,8 @@ function mapUnits(pathId: string, aiUnits: AiPathResponse["units"]): Unit[] {
 
 export function aiResponseToPath(
   subject: string,
-  mode: LearningMode,
   response: AiPathResponse,
+  provider: "groq" | "gemini" = "gemini",
 ): LearningPath {
   const pathId = createId("path");
   const today = new Date().toISOString().slice(0, 10);
@@ -90,7 +90,6 @@ export function aiResponseToPath(
   return {
     id: pathId,
     subject,
-    mode,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     units: mapUnits(pathId, response.units),
@@ -101,33 +100,97 @@ export function aiResponseToPath(
     lastActiveDate: today,
     lessonsCompleted: 0,
     aiGenerated: true,
+    generationProvider: provider,
+    geminiUpgraded: provider === "gemini",
   };
 }
 
+export interface ExpansionPathContext {
+  id: string;
+  unitCount: number;
+  lessonCount: number;
+}
+
 export function aiExpansionToUnit(
-  path: LearningPath,
+  path: LearningPath | ExpansionPathContext,
   response: AiExpansionResponse,
 ): Unit {
+  if (!response.unit) {
+    throw new Error("Expansion response is missing unit");
+  }
+  const { unit } = response;
   const unitId = createId("unit");
-  const lessonOrder = path.units.reduce((sum, u) => sum + u.lessons.length, 0);
+  const lessonOrder =
+    "units" in path
+      ? path.units.reduce((sum, u) => sum + u.lessons.length, 0)
+      : path.lessonCount;
+  const unitOrder = "units" in path ? path.units.length : path.unitCount;
 
   return {
     id: unitId,
     pathId: path.id,
-    title: response.unit.title,
-    description: response.unit.description,
-    order: path.units.length,
-    depth: response.unit.depth,
-    lessons: mapLessons(response.unit.lessons, unitId, response.unit.depth, lessonOrder).map(
-      (lesson, index) => ({
-        ...lesson,
-        isNew: true,
-        status: index === 0 ? ("available" as LessonStatus) : lesson.status,
-      }),
-    ),
+    title: unit.title,
+    description: unit.description,
+    order: unitOrder,
+    depth: unit.depth,
+    lessons: mapLessons(unit.lessons, unitId, unit.depth, lessonOrder).map((lesson, index) => ({
+      ...lesson,
+      isNew: true,
+    })),
   };
 }
 
 export function getExistingLessonTitles(path: LearningPath): string[] {
   return path.units.flatMap((u) => u.lessons.map((l) => l.title));
+}
+
+export function applyPathUpgrade(
+  path: LearningPath,
+  upgrade: AiPathUpgradeResponse,
+): LearningPath {
+  const enrichmentByTitle = new Map(upgrade.enrichedLessons.map((lesson) => [lesson.title, lesson]));
+
+  const units = path.units.map((unit) => ({
+    ...unit,
+    lessons: unit.lessons.map((lesson) => {
+      const enriched = enrichmentByTitle.get(lesson.title);
+      if (!enriched) return lesson;
+      return {
+        ...lesson,
+        type: enriched.type ?? lesson.type,
+        estimatedMinutes: enriched.estimatedMinutes ?? lesson.estimatedMinutes,
+        content: mapContent(enriched.content),
+      };
+    }),
+  }));
+
+  let updated: LearningPath = {
+    ...path,
+    units,
+    geminiUpgraded: true,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (upgrade.additionalUnit) {
+    updated = appendFoundationalUnit(updated, aiExpansionToUnit(updated, { unit: upgrade.additionalUnit }));
+  }
+
+  return reconcileLessonLocks(updated);
+}
+
+function appendFoundationalUnit(path: LearningPath, newUnit: Unit): LearningPath {
+  const unitWithFlags = {
+    ...newUnit,
+    lessons: newUnit.lessons.map((lesson) => ({
+      ...lesson,
+      status: "locked" as LessonStatus,
+      isNew: false,
+    })),
+  };
+
+  return reconcileLessonLocks({
+    ...path,
+    units: [...path.units, unitWithFlags],
+    updatedAt: new Date().toISOString(),
+  });
 }
