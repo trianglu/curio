@@ -1,14 +1,28 @@
 import { NextResponse } from "next/server";
 import { generateInitialPath, getConfiguredProviders } from "@/lib/ai/client";
 import { aiResponseToPath } from "@/lib/ai/transform";
+import { readCachedPath, writeCachedPath } from "@/lib/content-cache";
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { subject?: string };
+    const body = (await request.json()) as { subject?: string; bypassCache?: boolean };
     const subject = body.subject?.trim();
 
     if (!subject) {
       return NextResponse.json({ error: "Subject is required" }, { status: 400 });
+    }
+
+    if (!body.bypassCache) {
+      const cached = await readCachedPath(subject);
+      if (cached) {
+        return NextResponse.json({
+          path: aiResponseToPath(subject, cached.data, cached.provider),
+          provider: cached.provider,
+          aiGenerated: true,
+          cached: true,
+          cachedAt: cached.generatedAt,
+        });
+      }
     }
 
     const providers = getConfiguredProviders();
@@ -45,11 +59,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const path = aiResponseToPath(subject, result.data, result.provider === "groq" ? "groq" : "gemini");
+    const provider = result.provider === "groq" ? "groq" : "gemini";
+    const path = aiResponseToPath(subject, result.data, provider);
+    await writeCachedPath(subject, result.data, provider);
+
     return NextResponse.json({
       path,
       provider: result.provider,
       aiGenerated: true,
+      cached: false,
     });
   } catch (error) {
     console.error("Path generation error:", error);

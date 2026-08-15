@@ -16,6 +16,7 @@ This repository ships a working UI, path generation APIs, spaced-repetition revi
 | **Example mode** | `/example` — try the product UI with template Quantum Physics lessons (no keys) |
 | **Accuracy first** | Confidence levels, caveats, disputed-claim panels — no false certainty |
 | **Background expansion** | AI adds deeper units over time while you learn |
+| **Content library** | Pre-generated subjects served with zero API calls — see below |
 | **Audio lessons** | Browser text-to-speech for hands-free review |
 | **Push notifications** | Optional web push when new passive content is ready |
 | **Spaced repetition** | SM-2 reviews of quiz items over time |
@@ -126,6 +127,50 @@ VAPID_SUBJECT=mailto:you@example.com
 
 ---
 
+## Content library (reuse instead of regenerating)
+
+Free tiers are the real constraint on this app: Groq allows 6K tokens per minute
+and Gemini roughly 20 requests per day per project. Every learner who asks for
+"Ancient Rome" otherwise burns fresh quota generating near-identical lessons.
+
+`content/library/` holds pre-generated content that `/api/generate/path` and
+`/api/generate/expand` check **before** calling any provider. A hit costs no
+quota and works even with no API keys configured.
+
+Seed the subjects you care about:
+
+```bash
+npm run seed:content -- "Ancient Rome" "Photosynthesis"
+
+# also pre-generate background expansion units up to depth 3
+npm run seed:content -- --depth 3 "Ancient Rome"
+
+# regenerate an already-seeded subject
+npm run seed:content -- --force "Ancient Rome"
+```
+
+Commit the resulting JSON so every deploy and teammate benefits.
+
+To capture what you generate while browsing in dev, set `CURIO_CACHE_PERSIST=1`
+in `.env.local`; successful generations are written to `content/library/` as you
+use the app. This never runs in production, where the filesystem is read-only.
+
+Details worth knowing:
+
+- Subjects are matched loosely, so `Ancient Rome`, `ancient rome`, and
+  `  Ancient  Rome!  ` share one entry. The learner still sees their own casing.
+- Path/unit/lesson ids are minted per request, so a shared entry never collides
+  across learners or progress records.
+- **Regenerate** on a path bypasses the library on purpose — a learner asking for
+  different content should not be handed the version they just rejected.
+- A cached expansion unit is skipped when it would repeat a lesson the learner
+  already has, falling back to a live call.
+- Entries are re-validated against `src/lib/ai/schemas.ts` on every read, so a
+  stale or hand-edited file is ignored rather than served. Re-run the seed script
+  after changing those schemas.
+
+---
+
 ## Optional services
 
 ### Cloud sync (Supabase)
@@ -154,6 +199,7 @@ Add public/private keys to `.env.local` as above, then restart.
 | `npm run build` | Production build |
 | `npm run start` | Serve production build |
 | `npm run lint` | ESLint |
+| `npm run seed:content -- "Subject"` | Pre-generate content into `content/library/` |
 
 ---
 
@@ -177,10 +223,13 @@ src/
 ├── context/learning-context.tsx # Profile state, expansion loop
 ├── lib/
 │   ├── ai/                      # Client, prompts, schemas, transform
+│   ├── content-cache.ts         # Subject-keyed reuse of generated content
 │   ├── mock-generator.ts        # Template path for example mode
 │   ├── path-engine.ts           # Progress / unlock helpers
 │   └── expansion-runner.ts      # Expansion timing + progress bar
 └── …
+content/library/                 # Pre-generated lessons (zero-quota hits)
+scripts/seed-content.ts          # CLI that fills the library
 public/sw.js                     # Service worker (production)
 supabase/schema.sql              # Optional DB schema
 ```

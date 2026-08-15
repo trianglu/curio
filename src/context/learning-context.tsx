@@ -268,7 +268,9 @@ export function LearningProvider({ children }: { children: ReactNode }) {
       const response = await fetch("/api/generate/path", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject: existing.subject }),
+        // Regenerating must produce different content than the learner already
+        // rejected, so skip the cached version of this subject.
+        body: JSON.stringify({ subject: existing.subject, bypassCache: true }),
       });
 
       const data = await response.json();

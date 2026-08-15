@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { generateExpansion } from "@/lib/ai/client";
 import { isExpansionStopResponse } from "@/lib/ai/schemas";
 import { aiExpansionToUnit, getExistingLessonTitles } from "@/lib/ai/transform";
+import { readCachedExpansion, writeCachedExpansion } from "@/lib/content-cache";
 import type { LearningPath } from "@/lib/types";
 
 interface ExpandRequestBody {
@@ -12,6 +13,7 @@ interface ExpandRequestBody {
   existingTitles?: string[];
   aiGenerated?: boolean;
   unitCount?: number;
+  bypassCache?: boolean;
 }
 
 export async function POST(request: Request) {
@@ -37,6 +39,33 @@ export async function POST(request: Request) {
 
     const depth = Math.min(expansionDepth + 1, 4);
 
+    const pathContext = path ?? {
+      id: pathId,
+      unitCount: body.unitCount ?? 0,
+      lessonCount: existingTitles.length,
+    };
+
+    if (!body.bypassCache) {
+      const cached = await readCachedExpansion(subject, depth, existingTitles);
+      if (cached) {
+        if (isExpansionStopResponse(cached.data)) {
+          return NextResponse.json({
+            exhausted: true,
+            reason: cached.data.stopReason,
+            provider: cached.provider,
+            cached: true,
+          });
+        }
+        return NextResponse.json({
+          unit: aiExpansionToUnit(pathContext, cached.data),
+          provider: cached.provider,
+          aiGenerated: true,
+          cached: true,
+          cachedAt: cached.generatedAt,
+        });
+      }
+    }
+
     const result = await generateExpansion(subject, existingTitles, depth);
 
     if ("error" in result) {
@@ -51,27 +80,23 @@ export async function POST(request: Request) {
       );
     }
 
+    const provider = result.provider === "groq" ? "groq" : "gemini";
+    await writeCachedExpansion(subject, depth, existingTitles, result.data, provider);
+
     if (isExpansionStopResponse(result.data)) {
       return NextResponse.json({
         exhausted: true,
         reason: result.data.stopReason,
         provider: result.provider,
+        cached: false,
       });
     }
 
-    const unit = aiExpansionToUnit(
-      path ?? {
-        id: pathId,
-        unitCount: body.unitCount ?? 0,
-        lessonCount: existingTitles.length,
-      },
-      result.data,
-    );
-
     return NextResponse.json({
-      unit,
+      unit: aiExpansionToUnit(pathContext, result.data),
       provider: result.provider,
       aiGenerated: true,
+      cached: false,
     });
   } catch (error) {
     console.error("Expansion error:", error);
